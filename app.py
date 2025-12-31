@@ -1,5 +1,5 @@
 from fastapi import FastAPI,Request,Depends
-from database import init_db,insert_user,getuser,create_users_table,create_teams_table,insert_team,update_team,delete_team,get_all_teams,retrieve_team
+from database import init_db,insert_user,getuser,create_users_table,create_teams_table,insert_team,update_team,delete_team,get_all_teams,retrieve_team,create_projects_table,get_all_projects,retrieve_project,insert_project,update_project,delete_project,create_team_memeber_table,insert_member,update_role,get_team_members,get_user_role,delete_member,get_team_id
 import passlib
 from pydantic import BaseModel
 from auth import hash_password,verify_password,create_access_token,verify_token
@@ -78,14 +78,18 @@ async def create_team(request:Request,team:teams, credentials = Depends(security
             name = team.name
             desc = team.description
 
-            insert_team(name,desc,id)
+            team_id = insert_team(name,desc,id)
+            insert_member(id,team_id)
+            update_role(id,team_id,"owner")
+
+
             return {"message": "Team created"}
     return {"error":"Could not create team"}
     
 
 
 @app.get('/teams')
-async def get_teams(request:Request,credentials = Depends(security)):
+async def get_allteams(request:Request,credentials = Depends(security)):
     auth_header = request.headers.get("Authorization")
     if auth_header and auth_header.startswith("Bearer"):
         token = auth_header.split()[1]
@@ -149,3 +153,180 @@ async def delete(team_id:int,request:Request,credentials = Depends(security)):
                 return {'message': 'Deleted'}
             
     return {"error": "Unauthorized"}
+
+#                                              CRUD PROJECTS ENDPOINTS
+
+class project_data(BaseModel):
+    name : str
+    description : str
+    status : str
+
+
+@app.post('/teams/{team_id}/projects')
+async def create_project(request:Request,credentials = Depends(security)):
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer"):
+        token = auth_header.split()[1]
+        token = token.strip('"')
+        created_by = verify_token(token)
+
+
+
+
+
+@app.get('/teams/{team_id}/projects')
+async def get_allprojects(request:Request,credentials = Depends(security)):
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer"):
+        token = auth_header.split()[1]
+        token = token.strip('"')
+        created_by = verify_token(token)
+
+
+
+@app.get('/projects/{project_id}')
+async def get_project(request:Request,credentials = Depends(security)):
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer"):
+        token = auth_header.split()[1]
+        token = token.strip('"')
+        created_by = verify_token(token)
+
+
+@app.put('/projects/{project_id}')
+async def update_projects(request:Request,credentials = Depends(security)):
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer"):
+        token = auth_header.split()[1]
+        token = token.strip('"')
+        created_by = verify_token(token)
+
+
+@app.delete('/projects/{project_id}')
+async def delete_projects(request:Request,credentials = Depends(security)):
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer"):
+        token = auth_header.split()[1]
+        token = token.strip('"')
+        created_by = verify_token(token)
+
+
+
+
+
+
+
+
+
+#                                     TEAM_MEMBERS ENDPOINTS
+
+class getid(BaseModel):
+    username : str
+
+
+@app.post('/teams/{team_id}/members')
+async def add_member(team_id:int,users:getid,request:Request,credentials = Depends(security)):
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer"):
+        token = auth_header.split()[1]
+        token = token.strip('"')
+        created_by = verify_token(token)
+        if created_by:
+            user = getuser(created_by)
+            id = user[0]
+            members = get_team_members(team_id)
+            member_ids = [member[0] for member in members]
+            if id not in member_ids:
+                return {'error':'Not Authorized'}
+            role = get_user_role(id,team_id)
+            if role == 'member':
+                return {'error':'Member can not add'}
+            else:
+                username = users.username
+                name = getuser(username)
+                user_id = name[0]
+                insert_member(user_id,team_id)
+                return {"message": "Member has been added"}            
+            
+    return "Not Authorized"
+
+
+@app.get('/teams/{team_id}/members')
+async def get_members(team_id: int,request:Request,credentials = Depends(security)):
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer"):
+        token = auth_header.split()[1]
+        token = token.strip('"')
+        created_by = verify_token(token)
+        if created_by:
+            user = getuser(created_by)
+            user_id = user[0]   
+            members = get_team_members(team_id)
+            member_ids = [member[0] for member in members]
+            if user_id not in member_ids:
+                return {'error':'Not Authorized'}
+            values = get_team_members(team_id)
+
+            return {'members': values}
+    return "Not Authorized"
+
+class getrole(BaseModel):
+    role : str
+
+
+@app.put('/teams/{team_id}/members/{user_id}')
+async def update(team_id: int,user_id: int,new:getrole,request:Request,credentials = Depends(security)):
+    if new.role not in ['admin', 'member']:
+        return {"error": "Can only set role to admin or member"}
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer"):
+        token = auth_header.split()[1]
+        token = token.strip('"')
+        created_by = verify_token(token)
+        if created_by:
+            user = getuser(created_by)
+            owner_id = user[0]
+            role = get_user_role(owner_id,team_id)
+            if role == 'admin':
+                target_role = get_user_role(user_id,team_id)
+                if target_role != 'member':
+                    return {"error": "Admins can only change member roles"}
+                else:
+                    update_role(user_id,team_id,new.role)
+                    return {'message':'Role has been updated'}
+            elif role == 'owner':
+                update_role(user_id,team_id,new.role)
+                return {'message':'Role has been updated'}
+
+    return "Not Authorized"
+                
+@app.delete('/teams/{team_id}/members/{user_id}')
+async def remove_member(user_id: int,team_id: int,request:Request,credentials = Depends(security)):
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer"):
+        token = auth_header.split()[1]
+        token = token.strip('"')
+        created_by = verify_token(token)
+        if created_by:
+            user = getuser(created_by)
+            owner_id = user[0]
+            role = get_user_role(owner_id,team_id)
+            if role == 'admin':
+                target_role = get_user_role(user_id,team_id)
+                if target_role != 'member':
+                    return {"error": "Admins can only delete member"}
+                else:
+                    delete_member(user_id,team_id)
+                    return {'message':'Member has been removed'}
+            elif role == 'owner':
+                delete_member(user_id,team_id)
+                return {'message':'Member has been removed'}
+
+
+
+    return "Not Authorized"
+
+
+
+
+
