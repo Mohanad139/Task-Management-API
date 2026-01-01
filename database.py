@@ -13,6 +13,14 @@ def init_db():
 #TEAMS
 #PROJECTS
 #TEAM_MEMBERS
+#TASKS
+
+
+
+
+
+
+
 
 
 #                           USERS
@@ -57,6 +65,22 @@ def getuser(username):
     cursor.close()
     conn.close()
     return user
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 #                           TEAMS
 def create_teams_table():
@@ -166,6 +190,22 @@ def get_team_id(name):
     return rows
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 #                                        PROJECTS
 def create_projects_table():
     conn = init_db()
@@ -272,6 +312,21 @@ def delete_project(project_id):
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 #                                        TEAMS_MEMEBR
 def create_team_memeber_table():
     conn = init_db()
@@ -367,10 +422,234 @@ def get_user_role(user_id, team_id):
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#                                        TASKS
+def create_tasks_table():
+    conn = init_db()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS tasks(
+        id SERIAL PRIMARY KEY,
+        project_id INTEGER,
+        title VARCHAR(30),
+        description TEXT,
+        status VARCHAR(30) DEFAULT 'in_progress',
+        priority VARCHAR(20) DEFAULT 'medium',
+        due_date TIMESTAMP,
+        created_by INTEGER,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(project_id,title),
+        CHECK (status IN ('todo', 'in_progress', 'done', 'blocked')),
+        CHECK (priority IN ('low','medium','high','urgent')),
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+        FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE RESTRICT)
+        """)
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+def insert_task(project_id, title, description, status, priority,due_date, created_by):
+    conn = init_db()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        INSERT INTO tasks (project_id, title, description, status, priority, due_date, created_by) VALUES 
+        (%s, %s, %s, %s, %s, %s, %s)""",(project_id, title, description, status, priority,due_date, created_by))
+    
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
+def get_task(task_id):
+    conn = init_db()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT t.*,
+        p.name as Project_name,
+        u1.username as created_by_name
+        FROM tasks t
+        JOIN projects p ON t.project_id = p.id
+        JOIN users u1 ON t.created_by = u1.id
+        WHERE t.id = %s""",(task_id,))
+    
+    row = cursor.fetchone()
+    cursor.close()
+    conn.close()
+
+    return row
+
+def get_all_tasks(project_id):
+    conn = init_db()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT t.*,
+        p.name as Project_name,
+        u1.username as created_by_name
+        FROM tasks t
+        JOIN projects p ON t.project_id = p.id
+        JOIN users u1 ON t.created_by = u1.id
+        WHERE p.id = %s
+        """,(project_id,))
+    
+    rows = cursor.fetchall()
+
+    cursor.close()
+    conn.close()
+    return rows
+
+def update_taskdb(task_id, title, description, status, priority, due_date):
+    conn = init_db()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        UPDATE tasks
+        SET title = %s,description = %s, status = %s,priority = %s,due_date = %s
+        WHERE id = %s""",(title, description, status, priority, due_date,task_id))
+    
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
+
+def delete_task(task_id):
+    conn = init_db()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        DELETE FROM tasks
+        WHERE id = %s""",(task_id,))
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#                                                  TASK_ASSIGNMENT
+def create_task_asign_table():
+    conn = init_db()
+    cursor = conn.cursor()
+
+
+    cursor.execute("""
+        CREATE TABLE task_assignments(
+        user_id INTEGER,
+        task_id INTEGER,
+        assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (user_id, task_id),
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+        )""")
+    
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
+def assign_task(task_id, user_id):
+    conn = init_db()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        INSERT INTO task_assignments (task_id,user_id) VALUES (%s,%s)""",(task_id,user_id))
+    
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
+def unassign_task(task_id, user_id):
+    conn = init_db()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        DELETE FROM task_assignments
+        WHERE task_id = %s AND user_id = %s""",(task_id,user_id))
+    
+    conn.commit()
+
+    cursor.close()
+    conn.close()
+
+def get_task_assignees(task_id):
+    conn = init_db()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT ta.user_id, u.username
+        FROM task_assignments ta
+        JOIN users u ON ta.user_id = u.id
+        WHERE ta.task_id = %s""",(task_id,))
+    
+    rows = cursor.fetchall()
+    
+    cursor.close()
+    conn.close()
+    return rows
+
+
+def is_user_assigned(task_id, user_id):
+    """Check if user is assigned to task"""
+    conn = init_db()
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        SELECT EXISTS(
+            SELECT 1 FROM task_assignments 
+            WHERE task_id = %s AND user_id = %s
+        )
+    """, (task_id, user_id))
+    
+    result = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    return result[0]
+
+
+
+
+
+
+
+
 if __name__ == "__main__":
     create_users_table()
     create_teams_table()
     create_projects_table()
     create_team_memeber_table()
+    create_tasks_table()
+    create_task_asign_table()
     print("Created successfully!")
 
