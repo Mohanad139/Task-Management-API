@@ -8,7 +8,13 @@ def init_db():
         )
     
     return conn
-    
+
+#USERS
+#TEAMS
+#PROJECTS
+#TEAM_MEMBERS
+
+
 #                           USERS
 def create_users_table():
     conn = init_db()
@@ -80,20 +86,19 @@ def insert_team(name, description, created_by):
         INSERT INTO teams (name,description,created_by) VALUES (%s,%s,%s)
         """,(name,description,created_by))
     
-    team_id = cursor.fetchone()[0]
     conn.commit()
     cursor.close()
     conn.close()
-    return team_id
 
 def retrieve_team(team_id):
     conn = init_db()
     cursor = conn.cursor()
 
     cursor.execute("""
-        SELECT * 
-        FROM teams
-        WHERE id = %s
+        SELECT t.*, u.username as created_by_name
+        FROM teams t
+        JOIN users u ON t.created_by = u.id
+        WHERE t.id = %s
         """,(team_id,))
     
     row = cursor.fetchone()
@@ -107,7 +112,10 @@ def get_all_teams():
     cursor = conn.cursor()
 
     cursor.execute("""
-        SELECT * FROM teams""")
+        SELECT t.*, u.username as created_by_name
+        FROM teams t 
+        JOIN users u ON t.created_by = u.id
+        """)
     
     rows = cursor.fetchall()
     
@@ -199,9 +207,11 @@ def retrieve_project(project_id):
     cursor = conn.cursor()
 
     cursor.execute("""
-    SELECT * 
-    FROM projects
-    WHERE id = %s""",(project_id,))
+    SELECT p.*, t.name as team_name, u.username as created_by_name
+    FROM projects p
+    JOIN teams t ON p.team_id = t.id
+    JOIN users u ON p.created_by = u.id
+    WHERE p.id = %s""",(project_id,))
 
     row = cursor.fetchone()
 
@@ -217,8 +227,11 @@ def get_all_projects(team_id):
     cursor = conn.cursor()
 
     cursor.execute("""
-    SELECT * FROM projects
-    WHERE team_id = %s
+    SELECT p.*, t.name as team_name, u.username as created_by_name
+    FROM projects p
+    JOIN teams t ON p.team_id = t.id
+    JOIN users u ON p.created_by = u.id
+    WHERE p.team_id = %s
     """,(team_id,))
 
     rows = cursor.fetchall()
@@ -325,9 +338,11 @@ def get_team_members(team_id):
     cursor = conn.cursor()
     
     cursor.execute("""
-        SELECT * FROM team_members
+        SELECT tm.user_id, tm.team_id, tm.role, tm.joined, u.username, u.email 
+        FROM team_members tm
+        JOIN users u ON tm.user_id = u.id
         WHERE team_id = %s
-    """, (team_id,))
+        """, (team_id,))
     
     rows = cursor.fetchall()
     cursor.close()

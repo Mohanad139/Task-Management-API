@@ -78,7 +78,8 @@ async def create_team(request:Request,team:teams, credentials = Depends(security
             name = team.name
             desc = team.description
 
-            team_id = insert_team(name,desc,id)
+            insert_team(name,desc,id)
+            team_id = get_team_id(name)
             insert_member(id,team_id)
             update_role(id,team_id,"owner")
 
@@ -163,52 +164,133 @@ class project_data(BaseModel):
 
 
 @app.post('/teams/{team_id}/projects')
-async def create_project(request:Request,credentials = Depends(security)):
+async def create_project(team_id: int,proj:project_data,request:Request,credentials = Depends(security)):
     auth_header = request.headers.get("Authorization")
     if auth_header and auth_header.startswith("Bearer"):
         token = auth_header.split()[1]
         token = token.strip('"')
         created_by = verify_token(token)
+        if created_by:
+            user = getuser(created_by)
+            user_id = user[0]
+            members = get_user_role(user_id,team_id)
+            if members is not None:
+                status = proj.status
+                if status in ['active','completed','archived']:
+                    insert_project(team_id,proj.name,proj.description,user_id,proj.status)
+                    return {'message':'Project has been created'}
+                else:
+                    return {'error':'Status must be (active,completed,archived) '}
+    
+    return {'error':'Not Authorized'}
 
 
 
 
 
 @app.get('/teams/{team_id}/projects')
-async def get_allprojects(request:Request,credentials = Depends(security)):
+async def get_allprojects(team_id:int,request:Request,credentials = Depends(security)):
     auth_header = request.headers.get("Authorization")
     if auth_header and auth_header.startswith("Bearer"):
         token = auth_header.split()[1]
         token = token.strip('"')
         created_by = verify_token(token)
+        if created_by:
+            user = getuser(created_by)
+            user_id = user[0]
+            members = get_user_role(user_id,team_id)
+            if members is not None:
+                projects = get_all_projects(team_id)
+                return {'Projects':projects}
+    return {'error':'Not Authorized'}
+
 
 
 
 @app.get('/projects/{project_id}')
-async def get_project(request:Request,credentials = Depends(security)):
+async def get_project(project_id : int,request:Request,credentials = Depends(security)):
     auth_header = request.headers.get("Authorization")
     if auth_header and auth_header.startswith("Bearer"):
         token = auth_header.split()[1]
         token = token.strip('"')
         created_by = verify_token(token)
+        if created_by:
+            user = getuser(created_by)
+            user_id = user[0]
+            project = retrieve_project(project_id)
+            if not project:
+                return {'error': "Project not found"}
+            team_id = project[1]
+            members = get_user_role(user_id,team_id)
+            if members is not None:
+                return {'message':project}
+    return {'error':'Not Authorized'}
 
+
+class updateproj(BaseModel):
+    name : str
+    description:str
+    status:str
 
 @app.put('/projects/{project_id}')
-async def update_projects(request:Request,credentials = Depends(security)):
+async def update_projects(project_id:int,data:updateproj,request:Request,credentials = Depends(security)):
     auth_header = request.headers.get("Authorization")
     if auth_header and auth_header.startswith("Bearer"):
         token = auth_header.split()[1]
         token = token.strip('"')
         created_by = verify_token(token)
+        if created_by:
+            user = getuser(created_by)
+            user_id = user[0]
+            project = retrieve_project(project_id)
+            if not project:
+                return {'error': "Project not found"}
+            team_id = project[1]
+            members = get_user_role(user_id,team_id)
+            if members in ['owner','admin']:
+                name = data.name
+                desc = data.description
+                status = data.status
+                update_project(project_id,name,desc,status)
+                return {'message': 'Project got updated'}
+            elif members == 'member':
+                if user_id == project[4]:
+                    name = data.name
+                    desc = data.description
+                    status = data.status
+                    update_project(project_id,name,desc,status)
+                    return {'message': 'Project got updated'}
+
+    
+    return {'error':'Not Authorized'}
+                
+
 
 
 @app.delete('/projects/{project_id}')
-async def delete_projects(request:Request,credentials = Depends(security)):
+async def delete_projects(project_id:int,request:Request,credentials = Depends(security)):
     auth_header = request.headers.get("Authorization")
     if auth_header and auth_header.startswith("Bearer"):
         token = auth_header.split()[1]
         token = token.strip('"')
         created_by = verify_token(token)
+        if created_by:
+            user = getuser(created_by)
+            user_id = user[0]
+            project = retrieve_project(project_id)
+            if not project:
+                return {'error': "Project not found"}
+            team_id = project[1]
+            members = get_user_role(user_id,team_id)
+            if members in ['owner','admin']:
+                delete_project(project_id)
+                return {'message':'Project got deleted'}
+            elif members == 'member':
+                if user_id == project[4]:
+                    delete_project(project_id)
+                    return {'message':'Project got deleted'}
+
+    return {'error':'Not Authorized'}
 
 
 
