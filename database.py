@@ -498,11 +498,11 @@ def get_task(task_id):
 
     return row
 
-def get_all_tasks(project_id):
+def get_all_tasks(project_id, status=None, priority=None, assigned_to=None):
     conn = init_db()
     cursor = conn.cursor()
-
-    cursor.execute("""
+    
+    query = """
         SELECT t.*,
         p.name as Project_name,
         u1.username as created_by_name
@@ -510,10 +510,28 @@ def get_all_tasks(project_id):
         JOIN projects p ON t.project_id = p.id
         JOIN users u1 ON t.created_by = u1.id
         WHERE p.id = %s
-        """,(project_id,))
+    """
     
+    params = [project_id]
+    
+    # Add filters dynamically
+    if status:
+        query += " AND t.status = %s"
+        params.append(status)
+    
+    if priority:
+        query += " AND t.priority = %s"
+        params.append(priority)
+    
+    if assigned_to:
+        query += """ AND EXISTS (
+            SELECT 1 FROM task_assignments ta 
+            WHERE ta.task_id = t.id AND ta.user_id = %s
+        )"""
+        params.append(assigned_to)
+    
+    cursor.execute(query, params)
     rows = cursor.fetchall()
-
     cursor.close()
     conn.close()
     return rows
@@ -564,7 +582,7 @@ def create_task_asign_table():
 
 
     cursor.execute("""
-        CREATE TABLE task_assignments(
+        CREATE TABLE IF NOT EXISTS task_assignments(
         user_id INTEGER,
         task_id INTEGER,
         assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -643,6 +661,141 @@ def is_user_assigned(task_id, user_id):
 
 
 
+#                                                  COMMENTS
+def create_comment_table():
+    conn = init_db()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS comments (
+            id SERIAL PRIMARY KEY,
+            task_id INTEGER,
+            comment TEXT,
+            created_by INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            edited_at TIMESTAMP,
+            is_edited BOOLEAN DEFAULT FALSE,
+            FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+            FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL)
+            """)
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+def insert_comment(task_id, comment, created_by):
+    conn = init_db()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        INSERT INTO comments (task_id,comment,created_by) VALUES (%s,%s,%s)""",(task_id,comment,created_by))
+    
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+def get_comment(comment_id):
+    conn = init_db()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT c.*,t.title,u.username
+        FROM comments c
+        JOIN tasks t ON c.task_id = t.id
+        LEFT JOIN users u ON c.created_by = u.id
+        WHERE c.id = %s""",(comment_id,))
+    
+    row = cursor.fetchone()
+
+    cursor.close()
+    conn.close()
+
+    return row
+
+def get_task_comments(task_id):
+    conn = init_db()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT c.*,t.title,u.username
+        FROM comments c
+        JOIN tasks t ON c.task_id = t.id
+        LEFT JOIN users u ON c.created_by = u.id
+        WHERE c.task_id = %s
+        """,(task_id,))
+    rows = cursor.fetchall()
+
+    cursor.close()
+    conn.close()
+
+    return rows
+
+
+def update_comment(comment_id, comment):
+    conn = init_db()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        UPDATE comments
+        SET comment = %s, edited_at = CURRENT_TIMESTAMP, is_edited = TRUE
+        WHERE id = %s""",(comment,comment_id))
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+def delete_comment(comment_id):
+    conn = init_db()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        DELETE FROM comments
+        WHERE id = %s""",(comment_id,))
+    
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
+
+
+
+
+def create_log_table():
+    conn = init_db()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS activity_logs(
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER,
+        action VARCHAR(50),
+        entity_type VARCHAR(20),
+        entity_id INTEGER,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        details text,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL)
+                   """)
+    
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+def insert_activity_log(user_id, action, entity_type, entity_id, details=None):
+    conn = init_db()
+    cursor = conn.cursor()
+
+
+    cursor.execute("""
+        INSERT INTO activity_logs (user_id, action, entity_type, entity_id, details) 
+        VALUES (%s, %s, %s, %s, %s)""",(user_id, action, entity_type, entity_id, details))
+    
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
+    
+
+
 
 if __name__ == "__main__":
     create_users_table()
@@ -651,5 +804,7 @@ if __name__ == "__main__":
     create_team_memeber_table()
     create_tasks_table()
     create_task_asign_table()
+    create_comment_table()
+    create_log_table()
     print("Created successfully!")
 

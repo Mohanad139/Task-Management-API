@@ -1,7 +1,7 @@
 from fastapi import FastAPI,Request,Depends,HTTPException
-from database import init_db,insert_user,getuser,create_users_table,create_teams_table,insert_team,update_team,delete_team,get_all_teams,retrieve_team,create_projects_table,get_all_projects,retrieve_project,insert_project,update_project,delete_project,create_team_memeber_table,insert_member,update_role,get_team_members,get_user_role,delete_member,get_team_id,create_task_asign_table,create_tasks_table,insert_task,unassign_task,update_taskdb,assign_task,get_all_tasks,get_task_assignees,get_task,delete_task,is_user_assigned
+from database import init_db,insert_user,getuser,create_users_table,create_teams_table,insert_team,update_team,delete_team,get_all_teams,retrieve_team,create_projects_table,get_all_projects,retrieve_project,insert_project,update_project,delete_project,create_team_memeber_table,insert_member,update_role,get_team_members,get_user_role,delete_member,get_team_id,create_task_asign_table,create_tasks_table,insert_task,unassign_task,update_taskdb,assign_task,get_all_tasks,get_task_assignees,get_task,delete_task,is_user_assigned,create_comment_table,insert_comment,get_comment,get_task_comments,update_comment,delete_comment,create_log_table,insert_activity_log
 import passlib
-from pydantic import BaseModel
+from pydantic import BaseModel, validator
 from auth import hash_password,verify_password,create_access_token,verify_token
 from fastapi.security import HTTPBearer
 from datetime import datetime
@@ -99,6 +99,7 @@ async def create_team(team:teams, request: Request,credentials = Depends(securit
             team_id = get_team_id(name)
             insert_member(id,team_id)
             update_role(id,team_id,"owner")
+            insert_activity_log(id, 'create_team', 'team', team_id, 'Created Team {name}')
 
 
             return {"message": "Team created"}
@@ -144,11 +145,14 @@ async def update(team_id:int,request:Request,team:updateteam,credentials = Depen
         token = token.strip('"')
         created_by = verify_token(token)
         if created_by:
+            names = getuser(created_by)
+            id = names[0]
             user = retrieve_team(team_id)
             if user:
                 name = team.name
                 desc = team.description
                 update_team(team_id,name,desc)
+                insert_activity_log(id, 'update', 'team', team_id, 'Updated team {user}')
 
                 return {"message": "Updated"}
     
@@ -168,6 +172,7 @@ async def delete(team_id:int,request:Request,credentials = Depends(security)):
             team = retrieve_team(team_id)
             if team and team[3] == user_id:
                 delete_team(team_id)
+                insert_activity_log(user_id, 'delete', 'team', team_id, "Deleted team {team}")
                 return {'message': 'Deleted'}
             
     return {"error": "Unauthorized"}
@@ -204,6 +209,7 @@ async def add_member(team_id:int,users:getid,request:Request,credentials = Depen
                 name = getuser(username)
                 user_id = name[0]
                 insert_member(user_id,team_id)
+                insert_activity_log(user_id, 'add_member', 'Team_member', team_id, 'ADDED TEAM MEMBER {username}')
                 return {"message": "Member has been added"}            
             
     return "Not Authorized"
@@ -251,11 +257,12 @@ async def update(team_id: int,user_id: int,new:getrole,request:Request,credentia
                     return {"error": "Admins can only change member roles"}
                 else:
                     update_role(user_id,team_id,new.role)
+                    insert_activity_log(user_id, "update_role", 'team_member', team_id, 'Updated Role {user_id} to {new.role}')
                     return {'message':'Role has been updated'}
             elif role == 'owner':
                 update_role(user_id,team_id,new.role)
+                insert_activity_log(user_id, "update_role", 'team_member', team_id, 'Updated Role {user_id} to {new.role}')
                 return {'message':'Role has been updated'}
-
     return "Not Authorized"
                 
 @app.delete('/teams/{team_id}/members/{user_id}')
@@ -275,9 +282,11 @@ async def remove_member(user_id: int,team_id: int,request:Request,credentials = 
                     return {"error": "Admins can only delete member"}
                 else:
                     delete_member(user_id,team_id)
+                    insert_activity_log(user_id, 'delete_member', 'team_member', team_id, 'DELETED member {created_by}}')
                     return {'message':'Member has been removed'}
             elif role == 'owner':
                 delete_member(user_id,team_id)
+                insert_activity_log(user_id, 'delete_member', 'team_member', team_id, 'DELETED member {created_by}')
                 return {'message':'Member has been removed'}
 
 
@@ -393,6 +402,8 @@ async def update_projects(project_id:int,data:updateproj,request:Request,credent
                 desc = data.description
                 status = data.status
                 update_project(project_id,name,desc,status)
+                insert_activity_log(user_id, 'update_project', 'project', project_id, "Updated project from {project}")
+
                 return {'message': 'Project got updated'}
             elif members == 'member':
                 if user_id == project[4]:
@@ -400,6 +411,7 @@ async def update_projects(project_id:int,data:updateproj,request:Request,credent
                     desc = data.description
                     status = data.status
                     update_project(project_id,name,desc,status)
+                    insert_activity_log(user_id, 'update_project', 'project', project_id, "Updated project from {project}")
                     return {'message': 'Project got updated'}
 
     
@@ -425,6 +437,7 @@ async def delete_projects(project_id:int,request:Request,credentials = Depends(s
             members = get_user_role(user_id,team_id)
             if members in ['owner','admin']:
                 delete_project(project_id)
+                insert_activity_log(user_id, 'delete_project', 'project', project_id, "DELETE A PROJECT {project}")
                 return {'message':'Project got deleted'}
             elif members == 'member':
                 if user_id == project[4]:
@@ -475,7 +488,7 @@ async def create_task(project_id : int,data:task_data,request:Request,credential
     return {'error':'Not Authorized'}
 
 @app.get('/projects/{project_id}/tasks')
-async def get_tasks(project_id:int,request:Request,credentials = Depends(security)):
+async def get_tasks(project_id: int,request: Request, credentials = Depends(security), status: Optional[str] = None, priority: Optional[str] = None, assigned_to: Optional[int] = None):
     auth_header = request.headers.get("Authorization")
     if auth_header and auth_header.startswith("Bearer"):
         token = auth_header.split()[1]
@@ -490,7 +503,7 @@ async def get_tasks(project_id:int,request:Request,credentials = Depends(securit
             team_id = project[1]
             members = get_user_role(user_id,team_id)
             if members:
-                tasks = get_all_tasks(project[0])
+                tasks = get_all_tasks(project[0], status, priority, assigned_to)
                 return {'Tasks': tasks}
             
     return {'Error': 'Not Authorized'}
@@ -548,6 +561,7 @@ async def update_task(task_id:int,data:updatetask,request:Request,credentials = 
             task = get_task(task_id)
             if members in ['owner','admin'] or user_id == task[7] or is_user_assigned(task_id, user_id):
                 update_taskdb(task_id,data.title, data.description, data.status, data.priority, data.due_date)
+                insert_activity_log(user_id, 'update_taskdb', 'task', task_id, 'Update a task from {task} to new')
                 return {'Message':'Data has been updated'}
     return {'Error': 'Not Authorized'}
 
@@ -573,6 +587,7 @@ async def deletetask(task_id:int,request:Request,credentials = Depends(security)
             task = get_task(task_id)
             if members in ['owner','admin'] or user_id == task[7]:
                 delete_task(task_id)
+                insert_activity_log(user_id, 'delete_task', 'task', task_id, 'DELETED A TASK {task}')
                 return {'Message':'Task has been deleted'}
     return {'Error': 'Not Authorized'}
 
@@ -615,6 +630,7 @@ async def assigntask(task_id:int,data:AssignTask,request:Request,credentials = D
                     member = get_user_role(id,team_id)
                     if (not (is_user_assigned(task_id,id))) and member:
                         assign_task(task_id,id)
+                        insert_activity_log(user_id, 'assign task', 'assign-task', task_id, 'Assigned task to {id}')
                     else:
                         continue
                 return {"Message": 'Task has been assigned'}
@@ -641,6 +657,7 @@ async def unassigntask(task_id:int,user_id:int,request:Request,credentials = Dep
 
             if members in ['owner','admin'] or id == task[7] or id == user_id:
                 unassign_task(task_id,user_id)
+                insert_activity_log(id, 'unassign_task', 'assign-task', task_id, 'Unassign task from {user_id}')
                 return {'Message': 'User has been unassigned'}
     return {'Error': 'Not Authorized'}
 
@@ -668,6 +685,138 @@ async def get_assignees(task_id:int,request:Request,credentials = Depends(securi
                 return {'Assigned to :': assignees}
     return {'Error':'Not Authorized'}
 
+
+
+
+
+
+
+
+
+class CommentData(BaseModel):
+    comment: str
+
+
+
+#                                                  CRUD COMMENTS ENDPOINTS
+@app.post('/tasks/{task_id}/comments')
+async def create_comment_endpoint(task_id:int,data:CommentData,request:Request,credentials = Depends(security)):
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer"):
+        token = auth_header.split()[1]
+        token = token.strip('"')
+        created_by = verify_token(token)
+
+        if created_by:
+            user = getuser(created_by)
+            id = user[0]
+            project_id = get_task(task_id)[1]
+            project = retrieve_project(project_id)
+            if not project:
+                return {'error': "Project not found"}
+            team_id = project[1]
+            members = get_user_role(id,team_id)
+            if members:
+                insert_comment(task_id,data.comment,id)
+                return {'Message':'Comment has been inserted'}
+    return {'Error':'Not Authorized'}
+
+@app.get('/tasks/{task_id}/comments')
+async def getallcomments(task_id:int,request:Request,credentials = Depends(security)):
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer"):
+        token = auth_header.split()[1]
+        token = token.strip('"')
+        created_by = verify_token(token)
+
+        if created_by:
+            user = getuser(created_by)
+            id = user[0]
+            project_id = get_task(task_id)[1]
+            project = retrieve_project(project_id)
+            if not project:
+                return {'error': "Project not found"}
+            team_id = project[1]
+            members = get_user_role(id,team_id)
+            if members:
+                comments = get_task_comments(task_id)
+                return {'Comments': comments}
+            
+    return {"Error":"Not Authorized"}
+
+
+@app.get('/comments/{comment_id}')
+async def get_comment_endpoints(comment_id:int,request:Request,credentials = Depends(security)):
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer"):
+        token = auth_header.split()[1]
+        token = token.strip('"')
+        created_by = verify_token(token)
+        # I have user_id,username,comment_id I want project_id,task_id
+        if created_by:
+            user = getuser(created_by)
+            id = user[0]
+            comment = get_comment(comment_id)
+            task_id = comment[1]
+            project_id = get_task(task_id)[1]
+            project = retrieve_project(project_id)
+            if not project:
+                return {'error': "Project not found"}
+            team_id = project[1]
+            members = get_user_role(id,team_id)
+            if members:
+                return {'Comment':comment}
+    return {'Error':'Not Authorized'}
+
+@app.put('/comments/{comment_id}')
+async def update_comment_ednpoint(comment_id:int,data:CommentData,request:Request,credentials = Depends(security)):
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer"):
+        token = auth_header.split()[1]
+        token = token.strip('"')
+        created_by = verify_token(token)
+        # I have user_id,username,comment_id I want project_id,task_id
+        if created_by:
+            user = getuser(created_by)
+            id = user[0]
+            comment = get_comment(comment_id)
+            task_id = comment[1]
+            project_id = get_task(task_id)[1]
+            project = retrieve_project(project_id)
+            if not project:
+                return {'error': "Project not found"}
+            team_id = project[1]
+            members = get_user_role(id,team_id)
+            if members and id == comment[3]:
+                update_comment(comment_id,data.comment)
+                insert_activity_log(id, 'update comment', 'comment', comment_id, "From {comment} to {data.comment}")
+                return {'Message':'Comment has been updated'}
+    return {'Error':'Not Authorized'}
+
+@app.delete('/comments/{comment_id}')
+async def delete_comment_endpoint(comment_id:int,request:Request,credentials = Depends(security)):
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer"):
+        token = auth_header.split()[1]
+        token = token.strip('"')
+        created_by = verify_token(token)
+        # I have user_id,username,comment_id I want project_id,task_id
+        if created_by:
+            user = getuser(created_by)
+            id = user[0]
+            comment = get_comment(comment_id)
+            task_id = comment[1]
+            project_id = get_task(task_id)[1]
+            project = retrieve_project(project_id)
+            if not project:
+                return {'error': "Project not found"}
+            team_id = project[1]
+            members = get_user_role(id,team_id)
+            if members in ['owner','admin'] or id == comment[3]:
+                delete_comment(comment_id)
+                insert_activity_log(id, 'delete_comment', 'comment',comment_id, 'Deleted a comment : {comment}')
+                return {'Message':'Comment has been deleted'}
+    return {'Error':'Not Authorized'}
 
 
 
