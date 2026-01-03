@@ -1,7 +1,7 @@
 from fastapi import FastAPI,Request,Depends,HTTPException
 from database import init_db,insert_user,getuser,create_users_table,create_teams_table,insert_team,update_team,delete_team,get_all_teams,retrieve_team,create_projects_table,get_all_projects,retrieve_project,insert_project,update_project,delete_project,create_team_memeber_table,insert_member,update_role,get_team_members,get_user_role,delete_member,get_team_id,create_task_asign_table,create_tasks_table,insert_task,unassign_task,update_taskdb,assign_task,get_all_tasks,get_task_assignees,get_task,delete_task,is_user_assigned,create_comment_table,insert_comment,get_comment,get_task_comments,update_comment,delete_comment,create_log_table,insert_activity_log
 import passlib
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, validator, EmailStr
 from auth import hash_password,verify_password,create_access_token,verify_token
 from fastapi.security import HTTPBearer
 from datetime import datetime
@@ -30,10 +30,54 @@ class User_reg(BaseModel):
     email : str
     password : str
 
+    @validator('username')
+    def validator_username(cls,v):
+        if not v or not v.strip():
+            raise ValueError("Username can not be empty")
+        if len(v) <= 3 or len(v) >= 50:
+            raise ValueError("Username need to be in range 3 - 50 characters")
+        if not v.replace('_', '').replace('-', '').isalnum():
+            raise ValueError('Username can only contain letters, numbers, underscores, and hyphens')
+        return v.strip()
+    @validator('email')
+    def validator_email(cls,v):
+        if not v or not v.strip():
+            raise ValueError("Email can not be empty")
+        if "@" not in v or "." not in v:
+            raise ValueError("Wrong Email Format")
+        if len(v) > 100:
+            raise ValueError("Email must be lower than 100 characters")
+        return v.strip().lower()
+    
+    @validator('password')
+    def validate_password(cls, v):
+        if not v:
+            raise ValueError('Password cannot be empty')
+        if len(v) < 8:
+            raise ValueError('Password must be at least 8 characters')
+        if len(v) > 128:
+            raise ValueError('Password must be less than 128 characters')
+        return v
+
+
+        
+        
 
 class User_log(BaseModel):
     username : str
     password : str
+
+    @validator('username')
+    def validate_username(cls, v):
+        if not v or not v.strip():
+            raise ValueError('Username cannot be empty')
+        return v.strip()
+    
+    @validator('password')
+    def validate_password(cls, v):
+        if not v:
+            raise ValueError('Password cannot be empty')
+        return v
 
 @app.post("/register")
 async def register(user:User_reg):
@@ -53,14 +97,14 @@ async def login(user:User_log):
 
     values = getuser(username)
     if values is None:
-        return {"error": "Invalid username or password"}
+        raise HTTPException(status_code=401, detail='Invalid password or username')
     hashed = values[3]
     check = verify_password(user.password,hashed)
     if check:
         token = create_access_token(username)
         return {"access_token": token, "token_type": "bearer"}
     else:
-        return {"error": "Invalid username or password"}
+        raise HTTPException(status_code=401, detail='Invalid password or username')
 
 
 
@@ -81,6 +125,19 @@ async def login(user:User_log):
 class teams(BaseModel):
         name : str
         description : str    
+
+        @validator('name')
+        def validate_name(cls, v):
+            if not v or not v.strip():
+                raise ValueError('Team name cannot be empty')
+            if len(v) > 100:
+                raise ValueError('Team name must be less than 100 characters')
+            return v.strip()
+        @validator('description')
+        def validate_description(cls, v):
+            if v and len(v) > 500:
+                raise ValueError('Description must be less than 500 characters')
+            return v.strip() if v else ''
 
 @app.post('/teams')
 async def create_team(team:teams, request: Request,credentials = Depends(security)):
@@ -103,7 +160,7 @@ async def create_team(team:teams, request: Request,credentials = Depends(securit
 
 
             return {"message": "Team created"}
-    return {"error":"Could not create team"}
+    raise HTTPException(status_code=401, detail='Could not create a team')
     
 
 
@@ -117,7 +174,7 @@ async def get_allteams(request:Request,credentials = Depends(security)):
         if created_by:
             values = get_all_teams()
             return values
-    return {"error": "Unauthorized"}
+    raise HTTPException(status_code=401, detail='Not Authorized')
 
 
 @app.get("/teams/{team_id}")
@@ -131,11 +188,25 @@ async def get_team(request:Request,team_id:int,credentials = Depends(security)):
             value = retrieve_team(team_id)
 
             return value
-    return {"error": "Unauthorized"}
+    raise HTTPException(status_code=401, detail='Not Authorized')
 
 class updateteam(BaseModel):
     name : str
     description : str
+
+    @validator('name')
+    def validate_name(cls, v):
+        if not v or not v.strip():
+            raise ValueError('Team name cannot be empty')
+        if len(v) > 100:
+            raise ValueError('Team name must be less than 100 characters')
+        return v.strip()
+    
+    @validator('description')
+    def validate_description(cls, v):
+        if v and len(v) > 500:
+            raise ValueError('Description must be less than 500 characters')
+        return v.strip() if v else ''
 
 @app.put("/teams/{team_id}")
 async def update(team_id:int,request:Request,team:updateteam,credentials = Depends(security)):
@@ -156,7 +227,7 @@ async def update(team_id:int,request:Request,team:updateteam,credentials = Depen
 
                 return {"message": "Updated"}
     
-    return {"error": "Unauthorized"}
+    raise HTTPException(status_code=401, detail='Not Authorized')
 
 @app.delete("/teams/{team_id}")
 async def delete(team_id:int,request:Request,credentials = Depends(security)):
@@ -175,7 +246,7 @@ async def delete(team_id:int,request:Request,credentials = Depends(security)):
                 insert_activity_log(user_id, 'delete', 'team', team_id, "Deleted team {team}")
                 return {'message': 'Deleted'}
             
-    return {"error": "Unauthorized"}
+    raise HTTPException(status_code=401, detail='Not Authorized')
 
 
 
@@ -185,6 +256,11 @@ async def delete(team_id:int,request:Request,credentials = Depends(security)):
 
 class getid(BaseModel):
     username : str
+    @validator('username')
+    def validate_username(cls, v):
+        if not v or not v.strip():
+            raise ValueError('Username cannot be empty')
+        return v.strip()
 
 
 @app.post('/teams/{team_id}/members')
@@ -200,10 +276,10 @@ async def add_member(team_id:int,users:getid,request:Request,credentials = Depen
             members = get_team_members(team_id)
             member_ids = [member[0] for member in members]
             if id not in member_ids:
-                return {'error':'Not Authorized'}
+                raise HTTPException(status_code=404, detail='Not Authorized')
             role = get_user_role(id,team_id)
             if role == 'member':
-                return {'error':'Member can not add'}
+                raise HTTPException(status_code=404, detail='Admin only can add member')
             else:
                 username = users.username
                 name = getuser(username)
@@ -212,8 +288,7 @@ async def add_member(team_id:int,users:getid,request:Request,credentials = Depen
                 insert_activity_log(user_id, 'add_member', 'Team_member', team_id, 'ADDED TEAM MEMBER {username}')
                 return {"message": "Member has been added"}            
             
-    return "Not Authorized"
-
+    raise HTTPException(status_code=401, detail='Not Authorized')
 
 @app.get('/teams/{team_id}/members')
 async def get_members(team_id: int,request:Request,credentials = Depends(security)):
@@ -228,20 +303,26 @@ async def get_members(team_id: int,request:Request,credentials = Depends(securit
             members = get_team_members(team_id)
             member_ids = [member[0] for member in members]
             if user_id not in member_ids:
-                return {'error':'Not Authorized'}
+                    raise HTTPException(status_code=404, detail='Not Authorized')
             values = get_team_members(team_id)
 
             return {'members': values}
-    return "Not Authorized"
+    raise HTTPException(status_code=401, detail='Not Authorized')
 
 class getrole(BaseModel):
     role : str
+    @validator('role')
+    def validate_role(cls, v):
+        valid_roles = ['admin', 'member']
+        if v not in valid_roles:
+            raise ValueError(f'Role must be one of: {", ".join(valid_roles)}')
+        return v
 
 
 @app.put('/teams/{team_id}/members/{user_id}')
 async def update(team_id: int,user_id: int,new:getrole,request:Request,credentials = Depends(security)):
     if new.role not in ['admin', 'member']:
-        return {"error": "Can only set role to admin or member"}
+        raise ValueError ("Can only set role to admin or member")
     auth_header = request.headers.get("Authorization")
     if auth_header and auth_header.startswith("Bearer"):
         token = auth_header.split()[1]
@@ -254,7 +335,7 @@ async def update(team_id: int,user_id: int,new:getrole,request:Request,credentia
             if role == 'admin':
                 target_role = get_user_role(user_id,team_id)
                 if target_role != 'member':
-                    return {"error": "Admins can only change member roles"}
+                    raise HTTPException(status_code=404, detail='Admin can only change member')
                 else:
                     update_role(user_id,team_id,new.role)
                     insert_activity_log(user_id, "update_role", 'team_member', team_id, 'Updated Role {user_id} to {new.role}')
@@ -263,7 +344,7 @@ async def update(team_id: int,user_id: int,new:getrole,request:Request,credentia
                 update_role(user_id,team_id,new.role)
                 insert_activity_log(user_id, "update_role", 'team_member', team_id, 'Updated Role {user_id} to {new.role}')
                 return {'message':'Role has been updated'}
-    return "Not Authorized"
+    raise HTTPException(status_code=401, detail='Not Authorized')
                 
 @app.delete('/teams/{team_id}/members/{user_id}')
 async def remove_member(user_id: int,team_id: int,request:Request,credentials = Depends(security)):
@@ -279,7 +360,7 @@ async def remove_member(user_id: int,team_id: int,request:Request,credentials = 
             if role == 'admin':
                 target_role = get_user_role(user_id,team_id)
                 if target_role != 'member':
-                    return {"error": "Admins can only delete member"}
+                    raise HTTPException(status_code=404, detail='Admin can only remove member')
                 else:
                     delete_member(user_id,team_id)
                     insert_activity_log(user_id, 'delete_member', 'team_member', team_id, 'DELETED member {created_by}}')
@@ -291,7 +372,7 @@ async def remove_member(user_id: int,team_id: int,request:Request,credentials = 
 
 
 
-    return "Not Authorized"
+    raise HTTPException(status_code=401, detail='Not Authorized')
 
 
 
@@ -311,6 +392,26 @@ class project_data(BaseModel):
     name : str
     description : str
     status : str
+    @validator('name')
+    def validate_name(cls, v):
+        if not v or not v.strip():
+            raise ValueError('Project name cannot be empty')
+        if len(v) > 100:
+            raise ValueError('Project name must be less than 100 characters')
+        return v.strip()
+    
+    @validator('description')
+    def validate_description(cls, v):
+        if v and len(v) > 500:
+            raise ValueError('Description must be less than 500 characters')
+        return v.strip() if v else ''
+    
+    @validator('status')
+    def validate_status(cls, v):
+        valid_statuses = ['active', 'completed', 'archived']
+        if v not in valid_statuses:
+            raise ValueError(f'Status must be one of: {", ".join(valid_statuses)}')
+        return v
 
 
 @app.post('/teams/{team_id}/projects')
@@ -329,10 +430,8 @@ async def create_project(team_id: int,proj:project_data,request:Request,credenti
                 if status in ['active','completed','archived']:
                     insert_project(team_id,proj.name,proj.description,user_id,proj.status)
                     return {'message':'Project has been created'}
-                else:
-                    return {'error':'Status must be (active,completed,archived) '}
     
-    return {'error':'Not Authorized'}
+    raise HTTPException(status_code=401, detail='Not Authorized')
 
 
 
@@ -352,7 +451,7 @@ async def get_allprojects(team_id:int,request:Request,credentials = Depends(secu
             if members is not None:
                 projects = get_all_projects(team_id)
                 return {'Projects':projects}
-    return {'error':'Not Authorized'}
+    raise HTTPException(status_code=401, detail='Not Authorized')
 
 
 
@@ -369,18 +468,38 @@ async def get_project(project_id : int,request:Request,credentials = Depends(sec
             user_id = user[0]
             project = retrieve_project(project_id)
             if not project:
-                return {'error': "Project not found"}
+                raise HTTPException(status_code=404, detail='Project not found')
             team_id = project[1]
             members = get_user_role(user_id,team_id)
             if members is not None:
                 return {'message':project}
-    return {'error':'Not Authorized'}
+    raise HTTPException(status_code=401, detail='Not Authorized')
 
 
 class updateproj(BaseModel):
     name : str
     description:str
     status:str
+    @validator('name')
+    def validate_name(cls, v):
+        if not v or not v.strip():
+            raise ValueError('Project name cannot be empty')
+        if len(v) > 100:
+            raise ValueError('Project name must be less than 100 characters')
+        return v.strip()
+    
+    @validator('description')
+    def validate_description(cls, v):
+        if v and len(v) > 500:
+            raise ValueError('Description must be less than 500 characters')
+        return v.strip() if v else ''
+    
+    @validator('status')
+    def validate_status(cls, v):
+        valid_statuses = ['active', 'completed', 'archived']
+        if v not in valid_statuses:
+            raise ValueError(f'Status must be one of: {", ".join(valid_statuses)}')
+        return v
 
 @app.put('/projects/{project_id}')
 async def update_projects(project_id:int,data:updateproj,request:Request,credentials = Depends(security)):
@@ -394,7 +513,7 @@ async def update_projects(project_id:int,data:updateproj,request:Request,credent
             user_id = user[0]
             project = retrieve_project(project_id)
             if not project:
-                return {'error': "Project not found"}
+                raise HTTPException(status_code=404, detail='Project not found')
             team_id = project[1]
             members = get_user_role(user_id,team_id)
             if members in ['owner','admin']:
@@ -415,7 +534,7 @@ async def update_projects(project_id:int,data:updateproj,request:Request,credent
                     return {'message': 'Project got updated'}
 
     
-    return {'error':'Not Authorized'}
+    raise HTTPException(status_code=401, detail='Not Authorized')
                 
 
 
@@ -432,7 +551,7 @@ async def delete_projects(project_id:int,request:Request,credentials = Depends(s
             user_id = user[0]
             project = retrieve_project(project_id)
             if not project:
-                return {'error': "Project not found"}
+                raise HTTPException(status_code=404, detail='Project not found')
             team_id = project[1]
             members = get_user_role(user_id,team_id)
             if members in ['owner','admin']:
@@ -444,7 +563,7 @@ async def delete_projects(project_id:int,request:Request,credentials = Depends(s
                     delete_project(project_id)
                     return {'message':'Project got deleted'}
 
-    return {'error':'Not Authorized'}
+    raise HTTPException(status_code=401, detail='Not Authorized')
 
 
 
@@ -466,6 +585,33 @@ class task_data(BaseModel):
     status : str
     priority : str
     due_date: Optional[datetime] = None
+    @validator('title')
+    def validate_title(cls, v):
+        if not v or not v.strip():
+            raise ValueError('Task title cannot be empty')
+        if len(v) > 100:
+            raise ValueError('Task title must be less than 100 characters')
+        return v.strip()
+    
+    @validator('description')
+    def validate_description(cls, v):
+        if v and len(v) > 1000:
+            raise ValueError('Description must be less than 1000 characters')
+        return v.strip() if v else ''
+    
+    @validator('status')
+    def validate_status(cls, v):
+        valid_statuses = ['todo', 'in_progress', 'done', 'blocked']
+        if v not in valid_statuses:
+            raise ValueError(f'Status must be one of: {", ".join(valid_statuses)}')
+        return v
+    
+    @validator('priority')
+    def validate_priority(cls, v):
+        valid_priorities = ['low', 'medium', 'high', 'urgent']
+        if v not in valid_priorities:
+            raise ValueError(f'Priority must be one of: {", ".join(valid_priorities)}')
+        return v
 
 @app.post('/projects/{project_id}/tasks')
 async def create_task(project_id : int,data:task_data,request:Request,credentials = Depends(security)):
@@ -479,13 +625,13 @@ async def create_task(project_id : int,data:task_data,request:Request,credential
             user_id = user[0]
             project = retrieve_project(project_id)
             if not project:
-                return {'error': "Project not found"}
+                raise HTTPException(status_code=404, detail='Project not found')
             team_id = project[1]
             members = get_user_role(user_id,team_id)
             if members:
                 insert_task(project_id, data.title, data.description, data.status, data.priority,data.due_date, user_id)
                 return {'message':'Inserted'}
-    return {'error':'Not Authorized'}
+    raise HTTPException(status_code=401, detail='Not Authorized')
 
 @app.get('/projects/{project_id}/tasks')
 async def get_tasks(project_id: int,request: Request, credentials = Depends(security), status: Optional[str] = None, priority: Optional[str] = None, assigned_to: Optional[int] = None):
@@ -499,14 +645,14 @@ async def get_tasks(project_id: int,request: Request, credentials = Depends(secu
             user_id = user[0]
             project = retrieve_project(project_id)
             if not project:
-                return {'error': "Project not found"}
+                raise HTTPException(status_code=404, detail='Project not found')
             team_id = project[1]
             members = get_user_role(user_id,team_id)
             if members:
                 tasks = get_all_tasks(project[0], status, priority, assigned_to)
                 return {'Tasks': tasks}
             
-    return {'Error': 'Not Authorized'}
+    raise HTTPException(status_code=401, detail='Not Authorized')
 
 
 
@@ -524,14 +670,14 @@ async def retrieve_task(task_id : int,request:Request,credentials = Depends(secu
             project_id = get_task(task_id)[1]
             project = retrieve_project(project_id)
             if not project:
-                return {'error': "Project not found"}
+                raise HTTPException(status_code=404, detail='Project not found')
             team_id = project[1]
             members = get_user_role(user_id,team_id)
             if members:
                 task = get_task(task_id)
                 return {'Task': task}
             
-    return {'Error': 'Not Authorized'}
+    raise HTTPException(status_code=401, detail='Not Authorized')
 
 class updatetask(BaseModel):
     title:str
@@ -539,6 +685,33 @@ class updatetask(BaseModel):
     status:str
     priority:str 
     due_date: Optional[datetime] = None
+    @validator('title')
+    def validate_title(cls, v):
+        if not v or not v.strip():
+            raise ValueError('Task title cannot be empty')
+        if len(v) > 100:
+            raise ValueError('Task title must be less than 100 characters')
+        return v.strip()
+    
+    @validator('description')
+    def validate_description(cls, v):
+        if v and len(v) > 1000:
+            raise ValueError('Description must be less than 1000 characters')
+        return v.strip() if v else ''
+    
+    @validator('status')
+    def validate_status(cls, v):
+        valid_statuses = ['todo', 'in_progress', 'done', 'blocked']
+        if v not in valid_statuses:
+            raise ValueError(f'Status must be one of: {", ".join(valid_statuses)}')
+        return v
+    
+    @validator('priority')
+    def validate_priority(cls, v):
+        valid_priorities = ['low', 'medium', 'high', 'urgent']
+        if v not in valid_priorities:
+            raise ValueError(f'Priority must be one of: {", ".join(valid_priorities)}')
+        return v
 
 
 @app.put('/tasks/{task_id}')
@@ -555,7 +728,7 @@ async def update_task(task_id:int,data:updatetask,request:Request,credentials = 
             project_id = get_task(task_id)[1]
             project = retrieve_project(project_id)
             if not project:
-                return {'error': "Project not found"}
+                raise HTTPException(status_code=404, detail='Project not found')
             team_id = project[1]
             members = get_user_role(user_id,team_id)
             task = get_task(task_id)
@@ -563,7 +736,7 @@ async def update_task(task_id:int,data:updatetask,request:Request,credentials = 
                 update_taskdb(task_id,data.title, data.description, data.status, data.priority, data.due_date)
                 insert_activity_log(user_id, 'update_taskdb', 'task', task_id, 'Update a task from {task} to new')
                 return {'Message':'Data has been updated'}
-    return {'Error': 'Not Authorized'}
+    raise HTTPException(status_code=401, detail='Not Authorized')
 
 
 
@@ -581,7 +754,7 @@ async def deletetask(task_id:int,request:Request,credentials = Depends(security)
             project_id = get_task(task_id)[1]
             project = retrieve_project(project_id)
             if not project:
-                return {'error': "Project not found"}
+                raise HTTPException(status_code=404, detail='Project not found')
             team_id = project[1]
             members = get_user_role(user_id,team_id)
             task = get_task(task_id)
@@ -589,7 +762,7 @@ async def deletetask(task_id:int,request:Request,credentials = Depends(security)
                 delete_task(task_id)
                 insert_activity_log(user_id, 'delete_task', 'task', task_id, 'DELETED A TASK {task}')
                 return {'Message':'Task has been deleted'}
-    return {'Error': 'Not Authorized'}
+    raise HTTPException(status_code=401, detail='Not Authorized')
 
 
 
@@ -606,6 +779,16 @@ async def deletetask(task_id:int,request:Request,credentials = Depends(security)
 class AssignTask(BaseModel):
     user_ids: list[int]
 
+    @validator('user_ids')
+    def validate_user_ids(cls, v):
+        if not v:
+            raise ValueError('Must provide at least one user ID')
+        if len(v) > 20:
+            raise ValueError('Cannot assign more than 20 users at once')
+        if len(v) != len(set(v)):
+            raise ValueError('Duplicate user IDs not allowed')
+        return v
+
 @app.post('/tasks/{task_id}/assign')
 async def assigntask(task_id:int,data:AssignTask,request:Request,credentials = Depends(security)):
     auth_header = request.headers.get("Authorization")
@@ -620,7 +803,7 @@ async def assigntask(task_id:int,data:AssignTask,request:Request,credentials = D
             project_id = get_task(task_id)[1]
             project = retrieve_project(project_id)
             if not project:
-                return {'error': "Project not found"}
+                raise HTTPException(status_code=404, detail='Project not found')
             team_id = project[1]
             members = get_user_role(user_id,team_id)
             task = get_task(task_id)
@@ -634,7 +817,7 @@ async def assigntask(task_id:int,data:AssignTask,request:Request,credentials = D
                     else:
                         continue
                 return {"Message": 'Task has been assigned'}
-    return {'Error':'Not Authorized'}
+    raise HTTPException(status_code=401, detail='Not Authorized')
 
 @app.delete('/tasks/{task_id}/unassign/{user_id}')
 async def unassigntask(task_id:int,user_id:int,request:Request,credentials = Depends(security)):
@@ -650,7 +833,7 @@ async def unassigntask(task_id:int,user_id:int,request:Request,credentials = Dep
             project_id = get_task(task_id)[1]
             project = retrieve_project(project_id)
             if not project:
-                return {'error': "Project not found"}
+                raise HTTPException(status_code=404, detail='Project not found')
             team_id = project[1]
             members = get_user_role(id,team_id)
             task = get_task(task_id)
@@ -659,7 +842,7 @@ async def unassigntask(task_id:int,user_id:int,request:Request,credentials = Dep
                 unassign_task(task_id,user_id)
                 insert_activity_log(id, 'unassign_task', 'assign-task', task_id, 'Unassign task from {user_id}')
                 return {'Message': 'User has been unassigned'}
-    return {'Error': 'Not Authorized'}
+    raise HTTPException(status_code=401, detail='Not Authorized')
 
 
 @app.get('/tasks/{task_id}/assignees')
@@ -676,14 +859,14 @@ async def get_assignees(task_id:int,request:Request,credentials = Depends(securi
             project_id = get_task(task_id)[1]
             project = retrieve_project(project_id)
             if not project:
-                return {'error': "Project not found"}
+                raise HTTPException(status_code=404, detail='Project not found')
             team_id = project[1]
             members = get_user_role(id,team_id)
 
             if members:
                 assignees = get_task_assignees(task_id)
                 return {'Assigned to :': assignees}
-    return {'Error':'Not Authorized'}
+    raise HTTPException(status_code=401, detail='Not Authorized')
 
 
 
@@ -695,6 +878,13 @@ async def get_assignees(task_id:int,request:Request,credentials = Depends(securi
 
 class CommentData(BaseModel):
     comment: str
+    @validator('comment')
+    def validate_comment(cls, v):
+        if not v or not v.strip():
+            raise ValueError('Comment cannot be empty')
+        if len(v) > 2000:
+            raise ValueError('Comment must be less than 2000 characters')
+        return v.strip()
 
 
 
@@ -713,13 +903,13 @@ async def create_comment_endpoint(task_id:int,data:CommentData,request:Request,c
             project_id = get_task(task_id)[1]
             project = retrieve_project(project_id)
             if not project:
-                return {'error': "Project not found"}
+                raise HTTPException(status_code=404, detail='Project not found')
             team_id = project[1]
             members = get_user_role(id,team_id)
             if members:
                 insert_comment(task_id,data.comment,id)
                 return {'Message':'Comment has been inserted'}
-    return {'Error':'Not Authorized'}
+    raise HTTPException(status_code=401, detail='Not Authorized')
 
 @app.get('/tasks/{task_id}/comments')
 async def getallcomments(task_id:int,request:Request,credentials = Depends(security)):
@@ -735,14 +925,14 @@ async def getallcomments(task_id:int,request:Request,credentials = Depends(secur
             project_id = get_task(task_id)[1]
             project = retrieve_project(project_id)
             if not project:
-                return {'error': "Project not found"}
+                raise HTTPException(status_code=404, detail='Project not found')
             team_id = project[1]
             members = get_user_role(id,team_id)
             if members:
                 comments = get_task_comments(task_id)
                 return {'Comments': comments}
             
-    return {"Error":"Not Authorized"}
+    raise HTTPException(status_code=401, detail='Not Authorized')
 
 
 @app.get('/comments/{comment_id}')
@@ -761,12 +951,12 @@ async def get_comment_endpoints(comment_id:int,request:Request,credentials = Dep
             project_id = get_task(task_id)[1]
             project = retrieve_project(project_id)
             if not project:
-                return {'error': "Project not found"}
+                raise HTTPException(status_code=404, detail='Project not found')
             team_id = project[1]
             members = get_user_role(id,team_id)
             if members:
                 return {'Comment':comment}
-    return {'Error':'Not Authorized'}
+    raise HTTPException(status_code=401, detail='Not Authorized')
 
 @app.put('/comments/{comment_id}')
 async def update_comment_ednpoint(comment_id:int,data:CommentData,request:Request,credentials = Depends(security)):
@@ -784,14 +974,14 @@ async def update_comment_ednpoint(comment_id:int,data:CommentData,request:Reques
             project_id = get_task(task_id)[1]
             project = retrieve_project(project_id)
             if not project:
-                return {'error': "Project not found"}
+                raise HTTPException(status_code=404, detail='Project not found')
             team_id = project[1]
             members = get_user_role(id,team_id)
             if members and id == comment[3]:
                 update_comment(comment_id,data.comment)
                 insert_activity_log(id, 'update comment', 'comment', comment_id, "From {comment} to {data.comment}")
                 return {'Message':'Comment has been updated'}
-    return {'Error':'Not Authorized'}
+    raise HTTPException(status_code=401, detail='Not Authorized')
 
 @app.delete('/comments/{comment_id}')
 async def delete_comment_endpoint(comment_id:int,request:Request,credentials = Depends(security)):
@@ -809,14 +999,14 @@ async def delete_comment_endpoint(comment_id:int,request:Request,credentials = D
             project_id = get_task(task_id)[1]
             project = retrieve_project(project_id)
             if not project:
-                return {'error': "Project not found"}
+                raise HTTPException(status_code=404, detail='Project not found')
             team_id = project[1]
             members = get_user_role(id,team_id)
             if members in ['owner','admin'] or id == comment[3]:
                 delete_comment(comment_id)
                 insert_activity_log(id, 'delete_comment', 'comment',comment_id, 'Deleted a comment : {comment}')
                 return {'Message':'Comment has been deleted'}
-    return {'Error':'Not Authorized'}
+    raise HTTPException(status_code=401, detail='Not Authorized')
 
 
 
