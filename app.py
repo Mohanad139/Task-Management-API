@@ -11,6 +11,13 @@ from typing import Optional
 
 
 create_users_table()
+create_teams_table()
+create_team_memeber_table()
+create_projects_table()
+create_tasks_table()
+create_task_asign_table()
+create_comment_table()
+create_log_table()
 
 app = FastAPI()
 security = HTTPBearer()

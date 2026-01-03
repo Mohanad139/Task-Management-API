@@ -1,12 +1,14 @@
 import psycopg2
+import os
+
 def init_db():
     conn = psycopg2.connect(
-        host='localhost',
-        database='taskdb',
-        user='postgres',
-        password='13579Asa'
-        )
-    
+        host=os.getenv('DATABASE_HOST', 'localhost'),
+        database=os.getenv('DATABASE_NAME', 'taskdb'),
+        user=os.getenv('DATABASE_USER', 'postgres'),
+        password=os.getenv('DATABASE_PASSWORD', '13579Asa'),
+        port=os.getenv('DATABASE_PORT', '5432')
+    )
     return conn
 
 #USERS
