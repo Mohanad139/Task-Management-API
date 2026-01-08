@@ -1,21 +1,25 @@
 import psycopg2
 import os
 
+
 def init_db():
     conn = psycopg2.connect(
-        host=os.getenv('DATABASE_HOST', 'localhost'),
-        database=os.getenv('DATABASE_NAME', 'taskdb'),
-        user=os.getenv('DATABASE_USER', 'postgres'),
-        password=os.getenv('DATABASE_PASSWORD', '13579Asa'),
-        port=os.getenv('DATABASE_PORT', '5432')
+        host="taskdb-aw.c5qckmuamkwu.us-east-2.rds.amazonaws.com",
+        port=5432,
+        database="postgres",
+        user="postgres",
+        password="1309m200*S"
     )
     return conn
 
-#USERS
+#Login/Register
 #TEAMS
 #PROJECTS
 #TEAM_MEMBERS
 #TASKS
+#TASK_ASSIGNMENT
+#COMMENTS
+
 
 
 
@@ -133,15 +137,17 @@ def retrieve_team(team_id):
     return row
 
 
-def get_all_teams():
+def get_all_teams(user_id):
     conn = init_db()
     cursor = conn.cursor()
 
     cursor.execute("""
-        SELECT t.*, u.username as created_by_name
+        SELECT t.id, t.name, t.description, t.created_by, t.created_at
         FROM teams t 
-        JOIN users u ON t.created_by = u.id
-        """)
+        JOIN team_members tm ON t.id = tm.team_id
+        WHERE tm.user_id = %s
+                   
+        """,(user_id,))
     
     rows = cursor.fetchall()
     
@@ -656,7 +662,6 @@ def is_user_assigned(task_id, user_id):
     cursor.close()
     conn.close()
     return result[0]
-
 
 
 

@@ -6,6 +6,8 @@ from auth import hash_password,verify_password,create_access_token,verify_token
 from fastapi.security import HTTPBearer
 from datetime import datetime
 from typing import Optional
+from fastapi.middleware.cors import CORSMiddleware
+
 
 
 
@@ -21,6 +23,14 @@ create_log_table()
 
 app = FastAPI()
 security = HTTPBearer()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://tuesday-git-main-mohanads-projects-7f4efaf5.vercel.app"],  
+    allow_credentials=True,
+    allow_methods=["*"],  
+    allow_headers=["*"],  
+)
 
 
 
@@ -120,7 +130,21 @@ async def login(user:User_log):
 
 
 
-
+@app.get('/me')
+async def get_current_user(request: Request, credentials = Depends(security)):
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer"):
+        token = auth_header.split()[1]
+        token = token.strip('"')
+        username = verify_token(token)
+        if username:
+            user = getuser(username)
+            return {
+                "id": user[0],
+                "username": user[1],
+                "email": user[2]
+            }
+    raise HTTPException(status_code=401, detail="Unauthorized")
 
 
 
@@ -179,7 +203,9 @@ async def get_allteams(request:Request,credentials = Depends(security)):
         token = token.strip('"')
         created_by = verify_token(token)
         if created_by:
-            values = get_all_teams()
+            user = getuser(created_by)
+            user_id = user[0]
+            values = get_all_teams(user_id)
             return values
     raise HTTPException(status_code=401, detail='Not Authorized')
 
@@ -339,6 +365,8 @@ async def update(team_id: int,user_id: int,new:getrole,request:Request,credentia
             user = getuser(created_by)
             owner_id = user[0]
             role = get_user_role(owner_id,team_id)
+            if owner_id == user_id:
+                raise HTTPException(status_code=404, detail='Can not change owner role')
             if role == 'admin':
                 target_role = get_user_role(user_id,team_id)
                 if target_role != 'member':
@@ -827,7 +855,7 @@ async def assigntask(task_id:int,data:AssignTask,request:Request,credentials = D
     raise HTTPException(status_code=401, detail='Not Authorized')
 
 @app.delete('/tasks/{task_id}/unassign/{user_id}')
-async def unassigntask(task_id:int,user_id:int,request:Request,credentials = Depends(security)):
+async def unassigntask(task_id:int,user_id:str,request:Request,credentials = Depends(security)):
     auth_header = request.headers.get("Authorization")
     if auth_header and auth_header.startswith("Bearer"):
         token = auth_header.split()[1]
@@ -844,10 +872,11 @@ async def unassigntask(task_id:int,user_id:int,request:Request,credentials = Dep
             team_id = project[1]
             members = get_user_role(id,team_id)
             task = get_task(task_id)
+            userid = getuser(user_id)[0]
 
-            if members in ['owner','admin'] or id == task[7] or id == user_id:
-                unassign_task(task_id,user_id)
-                insert_activity_log(id, 'unassign_task', 'assign-task', task_id, 'Unassign task from {user_id}')
+            if members in ['owner','admin'] or id == task[7] or id == userid:
+                unassign_task(task_id,userid)
+                insert_activity_log(id, 'unassign_task', 'assign-task', task_id, 'Unassign task from {userid}')
                 return {'Message': 'User has been unassigned'}
     raise HTTPException(status_code=401, detail='Not Authorized')
 
