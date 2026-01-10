@@ -4,11 +4,11 @@ import os
 
 def init_db():
     conn = psycopg2.connect(
-        host="taskdb-aw.c5qckmuamkwu.us-east-2.rds.amazonaws.com",
+        host="taskdb",
         port=5432,
         database="postgres",
         user="postgres",
-        password="1309m200*S"
+        password="13579Asa"
     )
     return conn
 

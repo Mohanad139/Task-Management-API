@@ -26,7 +26,7 @@ security = HTTPBearer()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://tuesday-git-main-mohanads-projects-7f4efaf5.vercel.app"],  
+    allow_origins=["https://task-frontend-green-delta.vercel.app"],  
     allow_credentials=True,
     allow_methods=["*"],  
     allow_headers=["*"],  
