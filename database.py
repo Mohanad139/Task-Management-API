@@ -1,15 +1,10 @@
 import psycopg2
 import os
 
+DATABASE_URL = os.getenv("postgresql://db_t8k2_user:N9Ft3nK0zAP4B3KPIP6fLcK9U8sxLjFo@dpg-d5gvr56r433s73bdkdug-a/db_t8k2")
 
 def init_db():
-    conn = psycopg2.connect(
-        host="taskdb",
-        port=5432,
-        database="postgres",
-        user="postgres",
-        password="13579Asa"
-    )
+    conn =psycopg2.connect(DATABASE_URL)
     return conn
 
 #Login/Register
