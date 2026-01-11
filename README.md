@@ -1,68 +1,132 @@
-# Task Management API
+# MoTask Backend
 
-A REST API for managing teams, projects, and tasks with role-based permissions. Built with FastAPI and PostgreSQL.
+REST API for MoTask - a collaborative project management platform built with FastAPI and PostgreSQL.
 
-## 🔗 Live Demo
+## 🚀 Live Demo
 
-**Swagger Docs:** http://3.18.101.209:8000/docs
-
-## 🛠️ Tech Stack
-
-- FastAPI (Python)
-- PostgreSQL (AWS RDS)
-- JWT Authentication
-- Docker
-- AWS EC2 + RDS
+- **API**: https://task-management-api-production-a18c.up.railway.app
+- **Frontend**: https://task-frontend-green-delta.vercel.app
+- **API Docs**: https://task-management-api-production-a18c.up.railway.app/docs
 
 ## ✨ Features
 
-- User authentication with JWT
-- Team management with roles (owner/admin/member)
-- Project and task CRUD operations
-- Multiple users per task
-- Comments with edit tracking
-- Activity logging
-- Filter tasks by status, priority, assignee
+- JWT-based authentication
+- Team management with role-based access control
+- Project organization and tracking
+- Task assignment and status management
+- Comment system for collaboration
+- RESTful API design
 
-## 🚀 Quick Start
+## 🛠️ Tech Stack
+
+- **Framework**: FastAPI
+- **Database**: PostgreSQL
+- **Authentication**: JWT tokens
+- **Deployment**: Railway
+
+## 📋 API Endpoints
+
+### Authentication
+- `POST /register` - Create new account
+- `POST /login` - Login and get JWT token
+- `GET /me` - Get current user info
+
+### Teams
+- `GET /teams` - List user's teams
+- `POST /teams` - Create new team
+- `DELETE /teams/{id}` - Delete team
+- `POST /teams/{id}/members` - Add team member
+- `PUT /teams/{id}/members/{user_id}` - Update member role
+
+### Projects
+- `GET /teams/{id}/projects` - List team projects
+- `POST /teams/{id}/projects` - Create project
+- `PUT /projects/{id}` - Update project
+- `DELETE /projects/{id}` - Delete project
+
+### Tasks
+- `GET /projects/{id}/tasks` - List project tasks
+- `POST /projects/{id}/tasks` - Create task
+- `PUT /tasks/{id}` - Update task
+- `DELETE /tasks/{id}` - Delete task
+- `POST /tasks/{id}/assign` - Assign users to task
+- `DELETE /tasks/{id}/unassign/{user_id}` - Unassign user
+
+### Comments
+- `GET /tasks/{id}/comments` - List task comments
+- `POST /tasks/{id}/comments` - Add comment
+- `PUT /comments/{id}` - Update comment
+- `DELETE /comments/{id}` - Delete comment
+
+## 🏃 Local Development
+
+### Prerequisites
+- Python 3.10+
+- PostgreSQL
+
+### Setup
+
+1. Clone the repository
 ```bash
-git clone https://github.com/Mohanad139/Task-Management-API.git
+git clone https://github.com/Mohanad139/Task-Management-API
 cd Task-Management-API
-docker compose up --build
 ```
 
-Access at: http://localhost:8000/docs
+2. Create virtual environment
+```bash
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+```
 
-## 📊 Database Schema
+3. Install dependencies
+```bash
+pip install -r requirements.txt
+```
 
-- **users** - Authentication and profiles
-- **teams** - Workspaces with members
-- **projects** - Belong to teams
-- **tasks** - Work items with status/priority
-- **task_assignments** - Many-to-many user-task relationship
-- **comments** - Task discussions
-- **activity_logs** - Audit trail
 
-## 🌐 Deployment
+4. Start server
+```bash
+uvicorn app:app --reload
+```
 
-- **Database:** AWS RDS PostgreSQL
-- **Server:** AWS EC2 with Docker
-- **Access:** http://3.18.101.209:8000
+API will be available at `http://localhost:8000`
 
-## 📝 Main Endpoints
+## 📦 Project Structure
+```
+motask-backend/
+├── app.py              # FastAPI app and routes
+├── database.py         # Database connection
+├── requirements.txt    # Python dependencies
+└── README.md
+```
 
-- `POST /register` - Create account
-- `POST /login` - Get JWT token
-- Team, project, task CRUD at `/teams`, `/projects`, `/tasks`
-- Full docs at `/docs`
+## 🔐 Environment Variables
 
-## 🔮 Next Steps
+| Variable | Description |
+|----------|-------------|
+| `DATABASE_URL` | PostgreSQL connection string (auto-set by Railway) |
+| `JWT_SECRET_KEY` | Secret key for JWT tokens |
 
-- React frontend
-- Real-time updates
-- File attachments
-- Notifications
+## 🚀 Deployment on Railway
 
----
+1. Push code to GitHub
+2. Create new project on Railway
+3. Deploy from GitHub repo
+4. Add PostgreSQL database
+5. Add environment variable: `JWT_SECRET_KEY`
+6. Railway auto-generates `DATABASE_URL`
+7. Deploy!
 
-Built with FastAPI by [@Mohanad139](https://github.com/Mohanad139)
+## 📝 License
+
+MIT License - feel free to use this project for learning and portfolio purposes.
+
+## 👤 Author
+
+**Mohanad Bahammam**
+- GitHub: [@yourusername](https://github.com/Mohanad139)
+- LinkedIn: [Your Profile](https://www.linkedin.com/in/mohanad-bahammam-5891b7380/)
+
+## 🙏 Acknowledgments
+
+Built as a portfolio project to demonstrate full-stack development skills with modern web technologies.
